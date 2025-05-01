@@ -9,7 +9,7 @@
 @{
 
 # Script module or binary module file associated with this manifest.
-# RootModule = ''
+RootModule = 'pimcli.psm1'
 
 # Version number of this module.
 ModuleVersion = '0.0.1'
@@ -30,7 +30,7 @@ CompanyName = 'Unknown'
 Copyright = '(c) Bjorn Peters. All rights reserved.'
 
 # Description of the functionality provided by this module
-# Description = ''
+Description = 'PowerShell module for managing Azure Privileged Identity Management (PIM) requests and approvals'
 
 # Minimum version of the PowerShell engine required by this module
 PowerShellVersion = '7.*'
@@ -66,10 +66,22 @@ PowerShellVersion = '7.*'
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-# NestedModules = @()
+NestedModules = @(
+    'Private\Connect-AzPim.ps1',
+    'Private\Disconnect-AzPim.ps1',
+    'Private\Get-AzPimRequest.ps1',
+    'Private\Invoke-PimRequestApproval.ps1',
+    'Private\New-AzPimDecisionRequest.ps1',
+    'Private\Show-AzPimRequestDetail.ps1',
+    'Private\Show-Banner.ps1',
+    'Private\Show-MainMenu.ps1',
+    'Public\Start-PimCli.ps1'
+)
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @()
+FunctionsToExport = @(
+    'Start-PimCli'
+)
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()

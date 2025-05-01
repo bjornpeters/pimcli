@@ -1,0 +1,28 @@
+name: Publish PowerShell Module
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PowerShell
+      uses: actions/setup-powershell@v2
+      with:
+        pwsh-version: '7.x'
+
+    - name: Publish to PowerShell Gallery
+      env:
+        NUGET_API_KEY: ${{ secrets.POWERSHELL_GALLERY_API_KEY }}
+      run: |
+        pwsh -Command "
+          \$moduleManifest = Get-ChildItem -Path . -Filter '*.psd1' | Select-Object -First 1
+          Publish-Module -Path \$moduleManifest.Directory.FullName -NuGetApiKey \$env:NUGET_API_KEY -Verbose
+        "

@@ -24,7 +24,7 @@ GUID = 'a897e9a6-33c7-4d6e-98a1-875af5a790dd'
 Author = 'Bjorn Peters'
 
 # Company or vendor of this module
-CompanyName = 'Unknown'
+CompanyName = ''
 
 # Copyright statement for this module
 Copyright = '(c) Bjorn Peters. All rights reserved.'
@@ -51,7 +51,10 @@ PowerShellVersion = '7.0'
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-# RequiredModules = @()
+RequiredModules = @(
+    'Az.Accounts'
+    'Az.Resources'
+)
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()

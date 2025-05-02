@@ -2,7 +2,7 @@
 # Root module file for the pimcli PowerShell module
 
 # Import all the private functions first
-$privateScripts = Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -ErrorAction SilentlyContinue
+$privateScripts = Get-ChildItem -Path "$PSScriptRoot\private\*.ps1" -ErrorAction SilentlyContinue
 foreach ($script in $privateScripts) {
     try {
         . $script.FullName
@@ -13,7 +13,7 @@ foreach ($script in $privateScripts) {
 }
 
 # Import all the public functions
-$publicScripts = Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -ErrorAction SilentlyContinue
+$publicScripts = Get-ChildItem -Path "$PSScriptRoot\public\*.ps1" -ErrorAction SilentlyContinue
 foreach ($script in $publicScripts) {
     try {
         . $script.FullName

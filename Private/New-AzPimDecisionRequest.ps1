@@ -62,7 +62,7 @@ function New-AzPimDecisionRequest {
         }
     }
     end {
-        Write-Host "Successfully approved PIM request with status '$($approvalDecision.properties.status)'." -ForegroundColor 'Green'
+        Write-Host "Successfully approved PIM request." -ForegroundColor 'Green'
         return $true
     }
 }

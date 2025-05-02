@@ -1,15 +1,32 @@
 # pimcli.psm1
 # Root module file for the pimcli PowerShell module
 
-# The nested modules in the module manifest will automatically load all the functions,
-# but we need to make sure only the public ones are exported.
+# Import all the private functions first
+$privateScripts = Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -ErrorAction SilentlyContinue
+foreach ($script in $privateScripts) {
+    try {
+        . $script.FullName
+    }
+    catch {
+        Write-Error "Failed to import private function $($script.FullName): $_"
+    }
+}
 
-# All functions defined in the Public directory are considered public and will be exported
+# Import all the public functions
+$publicScripts = Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -ErrorAction SilentlyContinue
+foreach ($script in $publicScripts) {
+    try {
+        . $script.FullName
+    }
+    catch {
+        Write-Error "Failed to import public function $($script.FullName): $_"
+    }
+}
+
+# Public functions to export
 $publicFunctions = @(
     'Start-PimCli'
 )
 
-# Export public functions
+# Export only the public functions
 Export-ModuleMember -Function $publicFunctions
-# Don't export any aliases or variables
-Export-ModuleMember -Alias * -Variable *

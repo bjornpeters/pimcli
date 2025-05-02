@@ -33,7 +33,7 @@ Copyright = '(c) Bjorn Peters. All rights reserved.'
 Description = 'PowerShell module for managing Azure Privileged Identity Management (PIM) requests and approvals'
 
 # Minimum version of the PowerShell engine required by this module
-PowerShellVersion = '7.*'
+PowerShellVersion = '7.0'
 
 # Name of the PowerShell host required by this module
 # PowerShellHostName = ''
@@ -66,17 +66,8 @@ PowerShellVersion = '7.*'
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-NestedModules = @(
-    'Private\Connect-AzPim.ps1',
-    'Private\Disconnect-AzPim.ps1',
-    'Private\Get-AzPimRequest.ps1',
-    'Private\Invoke-PimRequestApproval.ps1',
-    'Private\New-AzPimDecisionRequest.ps1',
-    'Private\Show-AzPimRequestDetail.ps1',
-    'Private\Show-Banner.ps1',
-    'Private\Show-MainMenu.ps1',
-    'Public\Start-PimCli.ps1'
-)
+# Using the root module approach, we don't need to list nested modules
+NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = @(
@@ -139,6 +130,4 @@ PrivateData = @{
 
 # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
 # DefaultCommandPrefix = ''
-
 }
-

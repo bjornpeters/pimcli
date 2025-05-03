@@ -56,11 +56,7 @@ function Get-AzPimRoleManagementPolicy {
 
         # Get authentication token
         try {
-            $token = Get-AzAccessToken -ResourceUrl "https://management.azure.com/"
-            $authHeader = @{
-                'Authorization' = "Bearer $($token.Token)"
-                'Content-Type' = 'application/json'
-            }
+            $token = (Get-AzAccessToken -AsSecureString).Token
             Write-Verbose "Successfully obtained authentication token"
         }
         catch {
@@ -74,7 +70,7 @@ function Get-AzPimRoleManagementPolicy {
         
         switch ($Scope) {
             'subscription' {
-                $scopeId = "/subscriptions/$SubscriptionId"
+                $scopeId = "/providers/Microsoft.Subscription/subscriptions/$SubscriptionId"
             }
             'resourceGroup' {
                 if (-not $ResourceGroupName) {
@@ -102,9 +98,18 @@ function Get-AzPimRoleManagementPolicy {
         # Get the role management policy using REST API
         try {
             $apiVersion = "2020-10-01"
-            $url = "https://management.azure.com$($scopeId)/providers/Microsoft.Authorization/roleManagementPolicies?api-version=$apiVersion&`$filter=roleDefinitionId eq '$RoleDefinitionId'"
-            
-            $response = Invoke-RestMethod -Uri $url -Headers $authHeader -Method Get
+            # $url = "https://management.azure.com$($scopeId)/providers/Microsoft.Authorization/roleManagementPolicies?api-version=$apiVersion&`$filter=roleDefinitionId eq '$RoleDefinitionId'"
+            $url = "https://management.azure.com/providers/Microsoft.Subscription/subscriptions/28009298-a17a-45b1-8aa2-1c7061100112/providers/Microsoft.Authorization/roleManagementPolicyAssignments?api-version=2020-10-01&`$filter=roleDefinitionId eq '$RoleDefinitionId'"
+            Write-Verbose -Message "Uri: $url"
+
+            $invokeParams = @{
+                Method = 'GET'
+                Uri = $url
+                Authentication = 'Bearer'
+                Token = $token
+            }
+
+            $response = Invoke-RestMethod @invokeParams
             
             if (-not $response -or $response.value.Count -eq 0) {
                 Write-Warning "No role management policy found for the specified role and scope."

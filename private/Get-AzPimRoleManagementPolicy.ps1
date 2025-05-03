@@ -31,21 +31,26 @@
 function Get-AzPimRoleManagementPolicy {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [string]$SubscriptionId,
-        
-        [Parameter(Mandatory = $false)]
-        [string]$ResourceGroupName,
-        
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false,
+            HelpMessage = "The name of the resource")]
         [string]$ResourceName,
         
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false,
+            HelpMessage = "The name of the resource group containing the resource")]
+        [string]$ResourceGroupName,
+        
+        [Parameter(Mandatory = $true,
+            HelpMessage = "The ID of the role definition")]
         [string]$RoleDefinitionId,
         
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $false, 
+            HelpMessage = "The scope of the role assignment (subscription, resourceGroup, or resource)")]
         [ValidateSet('subscription', 'resourceGroup', 'resource')]
-        [string]$Scope = 'resource'
+        [string]$Scope = 'resource',
+        
+        [Parameter(Mandatory = $true,
+            HelpMessage = "The ID of the Azure subscription")]
+        [guid]$SubscriptionId
     )
 
     begin {
@@ -95,11 +100,12 @@ function Get-AzPimRoleManagementPolicy {
 
         Write-Verbose "Using scope ID: $scopeId"
 
-        # Get the role management policy using REST API
+        # Get the role management policy using the Azure REST API.
         try {
-            $apiVersion = "2020-10-01"
-            # $url = "https://management.azure.com$($scopeId)/providers/Microsoft.Authorization/roleManagementPolicies?api-version=$apiVersion&`$filter=roleDefinitionId eq '$RoleDefinitionId'"
-            $url = "https://management.azure.com/providers/Microsoft.Subscription/subscriptions/28009298-a17a-45b1-8aa2-1c7061100112/providers/Microsoft.Authorization/roleManagementPolicyAssignments?api-version=2020-10-01&`$filter=roleDefinitionId eq '$RoleDefinitionId'"
+            [string]$baseUrl = 'https://management.azure.com'
+            [string]$endpoint = '/providers/Microsoft.Authorization/roleManagementPolicyAssignments'
+            [string]$apiVersion = "2020-10-01"
+            [string]$url = "{0}{1}{2}?api-version={3}&`$filter=roleDefinitionId eq '{4}'" -f $baseUrl, $scopeId, $endpoint, $apiVersion, $RoleDefinitionId
             Write-Verbose -Message "Uri: $url"
 
             $invokeParams = @{
@@ -108,7 +114,6 @@ function Get-AzPimRoleManagementPolicy {
                 Authentication = 'Bearer'
                 Token = $token
             }
-
             $response = Invoke-RestMethod @invokeParams
             
             if (-not $response -or $response.value.Count -eq 0) {

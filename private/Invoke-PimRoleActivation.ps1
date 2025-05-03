@@ -107,10 +107,15 @@ function Invoke-PimRoleActivation {
             
             $selectedRole = $filteredRoles[$roleSelectionIndex]
             
-            # Ask for duration
-            Write-Host "`nActivating" -ForegroundColor Green
-            Write-Host "Role: $($selectedRole.Role)" -ForegroundColor Green
-            Write-Host "Resource: $($selectedRole.Resource)" -ForegroundColor Green
+            # Ask for the activation details such as the duration and the justification.
+            Clear-Host
+            Write-Host "===== Activation details =====" -ForegroundColor 'Cyan'
+            Write-Host ""
+            Write-Host "Role:     $($selectedRole.Role)" -ForegroundColor 'White'
+            Write-Host "Resource: $($selectedRole.Resource)" -ForegroundColor 'White'
+            Write-Host ""
+            Write-Host "==============================" -ForegroundColor 'Cyan'
+            Write-Host ""
             
             $duration = Read-Host "Enter activation duration in hours (default: 8)"
             

@@ -31,7 +31,7 @@ function Get-AzPimEligibleRoles {
             [object]$eligibilityAssignments = (Invoke-RestMethod @pendingRequestParams).value
 
             # TODO: Implement validation of the amount of returned assignments. Might be null...
-            
+
             # Format the output with useful information
             $eligibleRoles = $eligibilityAssignments | ForEach-Object {
                 [PSCustomObject]@{

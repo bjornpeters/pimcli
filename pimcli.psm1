@@ -1,8 +1,9 @@
 # pimcli.psm1
 # Root module file for the pimcli PowerShell module
 
-# Import all the private functions first
-$privateScripts = Get-ChildItem -Path "$PSScriptRoot/private/*.ps1" -ErrorAction SilentlyContinue
+# private/ is organised into core/, providers/ and screens/, so the search is
+# recursive. Dot-sourcing only defines functions, so load order does not matter.
+$privateScripts = Get-ChildItem -Path "$PSScriptRoot/private" -Filter '*.ps1' -Recurse -ErrorAction SilentlyContinue
 foreach ($script in $privateScripts) {
     try {
         . $script.FullName
@@ -13,7 +14,7 @@ foreach ($script in $privateScripts) {
 }
 
 # Import all the public functions
-$publicScripts = Get-ChildItem -Path "$PSScriptRoot/public/*.ps1" -ErrorAction SilentlyContinue
+$publicScripts = Get-ChildItem -Path "$PSScriptRoot/public" -Filter '*.ps1' -Recurse -ErrorAction SilentlyContinue
 foreach ($script in $publicScripts) {
     try {
         . $script.FullName
@@ -23,7 +24,8 @@ foreach ($script in $publicScripts) {
     }
 }
 
-# Public functions to export
+# Public functions to export. Kept in sync by hand with FunctionsToExport in
+# pimcli.psd1.
 $publicFunctions = @(
     'Start-PimCli'
 )

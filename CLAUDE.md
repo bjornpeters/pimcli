@@ -74,7 +74,7 @@ Naming: `<prefix>/<short-description>`. The existing `feature/roleActivation` br
 
 Merging: pull requests into `main` are **squash-merged**, so one branch becomes one commit on `main`. Keep the PR title in the imperative mood — it becomes the commit subject and, in practice, the changelog line. Work-in-progress commit hygiene on the branch itself matters less because of the squash.
 
-Delete branches after merge. `origin/feature/roleActivation` currently carries 7 unmerged commits adding role activation and eligibility retrieval — that work is not on `main`, so check it before rebuilding anything in that area.
+Delete branches after merge.
 
 ## Publishing
 
@@ -84,16 +84,28 @@ Release flow: cut a `release/x.y.z` branch, bump `ModuleVersion` (and `ReleaseNo
 
 ## Current state
 
-Implemented today (Azure resource PIM only):
+Implemented today (Azure resource PIM only). Nothing for Entra ID roles exists yet.
+
+Approval flow (menu option 1) — working:
 
 - `Start-PimCli` — entry point, auth + main menu loop.
 - `Connect-AzPim` / `Disconnect-AzPim` — wrap `Connect-AzAccount` / `Disconnect-AzAccount`, plus a heuristic PIM-access check.
 - `Get-AzPimRequest` — `GET roleAssignmentScheduleRequests?$filter=asApprover()` (api-version `2022-04-01-preview`).
 - `Invoke-PimRequestApproval` — interactive list, detail view, approve/deny flow.
 - `New-AzPimDecisionRequest` — reads approval `stages`, then `PUT`s the decision (api-version `2021-01-01-preview`).
-- `Show-Banner`, `Show-MainMenu`, `Show-AzPimRequestDetail` — console UI.
 
-Main menu options 2 (request activation) and 3 (view active roles) are stubs. Nothing for Entra ID roles exists yet.
+Activation flow (menu option 2) — **wired to the menu but not functional**, see gotchas:
+
+- `Invoke-PimRoleActivation` — interactive eligible-role picker and activation flow.
+- `Get-AzPimEligibleRoles` — `GET roleEligibilitySchedules?$filter=asTarget()` (api-version `2020-10-01`).
+- `Get-AzPimRoleManagementPolicy` — reads role policy settings, e.g. max duration and whether justification is required (api-version `2020-10-01`).
+- `New-AzPimRoleActivationRequest` — **mock only, submits nothing.**
+
+Active roles (menu option 3):
+
+- `Show-AzPimActiveRoles`, `Get-AzPimRoleActivation` — the live query in `Get-AzPimRoleActivation` is commented out.
+
+Console UI: `Show-Banner`, `Show-MainMenu`, `Show-AzPimRequestDetail`.
 
 ## API reference
 
@@ -116,14 +128,17 @@ Graph requires a Graph-audience token — `Get-AzAccessToken -ResourceUrl 'https
 
 These are real defects in the current code. Fix them when touching the surrounding code; don't replicate the patterns.
 
-- **`pimcli.psm1` uses backslash path separators** (`"$PSScriptRoot\private\*.ps1"`). On Linux and macOS a backslash is a literal filename character, so function loading silently finds nothing and the module exports broken stubs. Use `Join-Path` or forward slashes.
+- **`New-AzPimRoleActivationRequest` never calls the API.** It builds `$activationParams` and then discards it — the real `Invoke-RestMethod` is commented out and the function returns a fabricated `Success = $true` response. Menu option 2 reports activation succeeded while nothing is submitted. This is the single most misleading thing in the codebase.
+- **`New-AzPimRoleActivationRequest` throws before it gets that far** — line 38 calls `(Get-Date).AddHours($DurationInHours).Hour()`, but `Hour` is a *property* on `DateTime`, not a method, so it raises "does not contain a method named 'Hour'". The `catch` swallows it and returns `Success = $false`.
+- **`New-AzPimRoleActivationRequest` targets the wrong endpoint** — it `POST`s to `roleEligibilityScheduleRequests`, which grants *eligibility*. Self-activation belongs on `roleAssignmentScheduleRequests` with `requestType = 'SelfActivate'`.
+- **`principalId = (Get-AzContext).Account.Id`** yields a UPN, not the principal's object ID GUID the API expects. Resolve the object ID instead.
 - **`.Trim('providers/Microsoft.Authorization/roleAssignmentApprovals/')` in `Invoke-PimRequestApproval`** — `String.Trim` takes a *character set*, not a substring, so this strips arbitrary leading/trailing characters from the GUID. Use `-replace` or `Split('/')[-1]`.
 - **Token handling** — `Get-AzAccessToken -AsSecureString` returns a `SecureString`, which is what `Invoke-RestMethod -Authentication Bearer -Token` expects. Keep it a `SecureString`; never `ConvertFrom-SecureString` it to plaintext or log it.
 - **Tokens are fetched per call and never refreshed** across a long-running session. Long menu sessions can outlive the token.
 - **`Connect-AzPim`'s PIM check** is a wildcard match over `Get-AzRoleAssignment` names (`*Administrator*`, `*Owner*`, …). It is a guess, not an authorization check, and it only ever produces a warning.
 - **`New-AzPimDecisionRequest` writes raw API responses to the host** and always returns `$true` from `end{}` even after a caught failure — the caller's success check is meaningless.
 - **`Disconnect-AzPim` calls `Disconnect-AzAccount`**, which tears down the user's whole Az session, not just this module's.
-- **Preview API versions** are pinned inline in each function. Prefer a single shared constant when adding more calls.
+- **API versions are pinned inline in every function** and have drifted to four values: `2022-04-01-preview`, `2021-01-01-preview`, `2020-10-01` and `2021-04-01`. Consolidate into a shared constant.
 - **No tests, no PSScriptAnalyzer config, no LICENSE file** yet. There is no build or lint step in CI — only publish.
 
 ## Dependencies

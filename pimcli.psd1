@@ -30,7 +30,7 @@ CompanyName = ''
 Copyright = '(c) Bjorn Peters. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'PowerShell module for managing Azure Privileged Identity Management (PIM) requests and approvals'
+Description = 'Interactive CLI for Privileged Identity Management (PIM), covering both Azure resource roles and Entra ID directory roles'
 
 # Minimum version of the PowerShell engine required by this module
 PowerShellVersion = '7.0'

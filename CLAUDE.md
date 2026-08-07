@@ -22,23 +22,61 @@ End goal: publish to the **PowerShell Gallery** as a consumable module.
 ## Repository layout
 
 ```
-pimcli.psd1              Module manifest (version, exports, dependencies)
-pimcli.psm1              Root module — dot-sources private/ then public/, exports public functions
-public/                  Exported functions (one function per file, file named after the function)
-private/                 Internal helpers (not exported)
-New-OfflineImport.ps1    Dev helper: imports the module from source for local testing
-Publish-PimCli.ps1       Publishes to the PowerShell Gallery using $env:NUGET_API_KEY
-.github/workflows/       CI: publish.yaml runs Publish-PimCli.ps1 on a `v*` tag push
-.devcontainer/           Ubuntu devcontainer with pwsh, Az, Microsoft.Graph modules
+pimcli.psd1                  Module manifest (version, exports, dependencies)
+pimcli.psm1                  Root module — recursively dot-sources private/ then public/
+public/                      Exported functions (one function per file, file named after the function)
+private/core/                Navigation, provider dispatch, tokens, config, rendering
+private/providers/azure/     Azure resource PIM against ARM
+private/providers/entra/     Entra ID role PIM against Microsoft Graph
+private/screens/             One file per interactive screen
+PSScriptAnalyzerSettings.psd1  Lint config; exclusions are documented inline
+New-OfflineImport.ps1        Dev helper: imports the module from source for local testing
+Publish-PimCli.ps1           Publishes to the PowerShell Gallery using $env:NUGET_API_KEY
+.github/workflows/           CI: publish.yaml runs Publish-PimCli.ps1 on a `v*` tag push
+.devcontainer/               Ubuntu devcontainer with pwsh, Az, Microsoft.Graph modules
 ```
+
+`private/` is searched recursively, so the subfolders are organisation only. Dot-sourcing just defines functions, so load order never matters.
 
 ### Conventions
 
 - **One function per file.** File name matches the function name exactly.
 - New **exported** function: add the file to `public/`, then add the name to `FunctionsToExport` in `pimcli.psd1` **and** to the `$publicFunctions` array in `pimcli.psm1`. Both lists are maintained by hand and must stay in sync.
 - New **internal** function: add the file to `private/` only. No manifest change.
-- Naming: `*-AzPim*` for Azure/ARM resource PIM, and use `*-EntraPim*` for Entra ID directory-role PIM as that surface is built out.
-- Approved PowerShell verbs only (`Get-`, `New-`, `Invoke-`, `Show-`, `Connect-`, `Disconnect-`, `Start-`).
+- Approved PowerShell verbs only.
+
+Naming has three tiers, and picking the wrong one is how the provider split leaks into the UI:
+
+| Tier | Pattern | Example | Lives in |
+|---|---|---|---|
+| Neutral | `*-Pim*` | `Get-PimAccessToken`, `Show-PimTable` | `private/core/`, `private/screens/` |
+| Azure provider | `*-AzPim*` | `Get-AzPimEligibleRole` | `private/providers/azure/` |
+| Entra provider | `*-EntraPim*` | `Get-EntraPimEligibleRole` | `private/providers/entra/` |
+
+Screens and core code are always neutral. Only a provider function may name its surface.
+
+## Architecture
+
+Both PIM surfaces are the same engine with different serialization — the endpoints mirror each other one for one. So Entra ID is a **second backend behind one set of screens**, not a second half of the UI. Three pieces hold that together.
+
+**Provider registry.** `Initialize-PimProvider` maps each provider to the function implementing each operation. `Invoke-PimProviderOperation` is the only thing screens call:
+
+- Read operations fan out over every provider allowed by the scope filter and return one merged collection.
+- Providers are isolated. One failing lands in `Errors`; the others still return rows.
+- An operation not implemented yet lands in `Unavailable`, rendered as a note. **An unimplemented backend must never contribute an empty result that reads as "you have no access".** New provider functions throw `NotImplementedException` until they are real.
+- Write operations require `-Provider`; fanning a decision across surfaces is never meant.
+
+**Normalized objects.** Providers project their payloads through `New-PimEligibleRole`, `New-PimActiveRole` and `New-PimApprovalRequest`, so screens see one shape and the original payload stays on `Raw`. A new surface costs a projection, not a screen.
+
+**Navigation stack.** Screens never call each other. Each takes `-Session` and `-Context`, renders, reads input, and returns a directive from `New-PimNavigation` (`Push`/`Pop`/`Home`/`Stay`/`Exit`). `Invoke-PimNavigation` owns the stack. The call stack stays flat at any depth, and `back` behaves the same everywhere. Register a new screen in `Get-PimScreen`.
+
+### UI rules
+
+- **Action-first navigation.** The top level is the task, not the surface. Azure and Entra rows appear in the same list with a `Source` column. Provider is an attribute, never a menu level.
+- **Scope filter.** `Session.Scope` is `All`, `Azure` or `Entra`, shown in every header. Narrowing it means the other provider is never queried.
+- Read input through `Read-PimChoice` so `b`/`q`/`r` work everywhere; render lists with `Show-PimTable`; report gaps with `Show-PimProviderNote`.
+- Pause with `Wait-PimKey`, never a bare `Read-Host` — a bare call emits the typed line into the screen's output and corrupts the navigation directive.
+- Never default a justification. It is written to the audit record and read by an approver.
 
 ## Local development
 
@@ -84,28 +122,28 @@ Release flow: cut a `release/x.y.z` branch, bump `ModuleVersion` (and `ReleaseNo
 
 ## Current state
 
-Implemented today (Azure resource PIM only). Nothing for Entra ID roles exists yet.
+The navigation, provider dispatch and session layers are complete. All three screens render and are reachable; what varies is how many of the six provider operations are live behind them.
 
-Approval flow (menu option 1) — working:
+Live against the API:
 
-- `Start-PimCli` — entry point, auth + main menu loop.
-- `Connect-AzPim` / `Disconnect-AzPim` — wrap `Connect-AzAccount` / `Disconnect-AzAccount`, plus a heuristic PIM-access check.
-- `Get-AzPimRequest` — `GET roleAssignmentScheduleRequests?$filter=asApprover()` (api-version `2022-04-01-preview`).
-- `Invoke-PimRequestApproval` — interactive list, detail view, approve/deny flow.
-- `New-AzPimDecisionRequest` — reads approval `stages`, then `PUT`s the decision (api-version `2021-01-01-preview`).
+| Operation | Azure | Entra |
+|---|---|---|
+| `GetEligibleRole` | `Get-AzPimEligibleRole` — `roleEligibilitySchedules?$filter=asTarget()` | stub |
+| `GetApprovalRequest` | `Get-AzPimApprovalRequest` — `roleAssignmentScheduleRequests?$filter=asApprover()` | stub |
+| `NewDecision` | `New-AzPimDecisionRequest` — reads `stages`, `PUT`s the decision | stub |
+| `GetActiveRole` | stub | stub |
+| `NewActivation` | stub | stub |
+| `RemoveActiveRole` | stub | stub |
 
-Activation flow (menu option 2) — **wired to the menu but not functional**, see gotchas:
+Every stub throws `NotImplementedException` and carries the endpoint and request shape for its implementation in its comment-based help. Nothing fabricates a result.
 
-- `Invoke-PimRoleActivation` — interactive eligible-role picker and activation flow.
-- `Get-AzPimEligibleRoles` — `GET roleEligibilitySchedules?$filter=asTarget()` (api-version `2020-10-01`).
-- `Get-AzPimRoleManagementPolicy` — reads role policy settings, e.g. max duration and whether justification is required (api-version `2020-10-01`).
-- `New-AzPimRoleActivationRequest` — **mock only, submits nothing.**
+Supporting code: `Connect-PimSession` / `Disconnect-PimSession`, `Get-PimAccessToken` (cached per audience), `Get-PimPrincipalId`, `Get-AzPimRoleManagementPolicy` (works, not yet wired into the registry — its `SubscriptionId`/`ResourceGroupName`/`ResourceName` signature predates the normalized scope model and needs reshaping first).
 
-Active roles (menu option 3):
+Next steps, in dependency order:
 
-- `Show-AzPimActiveRoles`, `Get-AzPimRoleActivation` — the live query in `Get-AzPimRoleActivation` is commented out.
-
-Console UI: `Show-Banner`, `Show-MainMenu`, `Show-AzPimRequestDetail`.
+1. `Get-AzPimActiveRole` and `Get-EntraPimEligibleRole` / `Get-EntraPimActiveRole` — reads, so they are the cheapest way to prove the merged list against a real tenant.
+2. Reshape `Get-AzPimRoleManagementPolicy` around `ScopeId` and register it as a `GetPolicy` operation, so the activation form can source max duration and whether justification or a ticket is mandatory instead of hard-coding a 1–24 hour range.
+3. The write operations.
 
 ## API reference
 
@@ -128,18 +166,25 @@ Graph requires a Graph-audience token — `Get-AzAccessToken -ResourceUrl 'https
 
 These are real defects in the current code. Fix them when touching the surrounding code; don't replicate the patterns.
 
-- **`New-AzPimRoleActivationRequest` never calls the API.** It builds `$activationParams` and then discards it — the real `Invoke-RestMethod` is commented out and the function returns a fabricated `Success = $true` response. Menu option 2 reports activation succeeded while nothing is submitted. This is the single most misleading thing in the codebase.
-- **`New-AzPimRoleActivationRequest` throws before it gets that far** — line 38 calls `(Get-Date).AddHours($DurationInHours).Hour()`, but `Hour` is a *property* on `DateTime`, not a method, so it raises "does not contain a method named 'Hour'". The `catch` swallows it and returns `Success = $false`.
-- **`New-AzPimRoleActivationRequest` targets the wrong endpoint** — it `POST`s to `roleEligibilityScheduleRequests`, which grants *eligibility*. Self-activation belongs on `roleAssignmentScheduleRequests` with `requestType = 'SelfActivate'`.
-- **`principalId = (Get-AzContext).Account.Id`** yields a UPN, not the principal's object ID GUID the API expects. Resolve the object ID instead.
-- **`.Trim('providers/Microsoft.Authorization/roleAssignmentApprovals/')` in `Invoke-PimRequestApproval`** — `String.Trim` takes a *character set*, not a substring, so this strips arbitrary leading/trailing characters from the GUID. Use `-replace` or `Split('/')[-1]`.
-- **Token handling** — `Get-AzAccessToken -AsSecureString` returns a `SecureString`, which is what `Invoke-RestMethod -Authentication Bearer -Token` expects. Keep it a `SecureString`; never `ConvertFrom-SecureString` it to plaintext or log it.
-- **Tokens are fetched per call and never refreshed** across a long-running session. Long menu sessions can outlive the token.
-- **`Connect-AzPim`'s PIM check** is a wildcard match over `Get-AzRoleAssignment` names (`*Administrator*`, `*Owner*`, …). It is a guess, not an authorization check, and it only ever produces a warning.
-- **`New-AzPimDecisionRequest` writes raw API responses to the host** and always returns `$true` from `end{}` even after a caught failure — the caller's success check is meaningless.
-- **`Disconnect-AzPim` calls `Disconnect-AzAccount`**, which tears down the user's whole Az session, not just this module's.
-- **API versions are pinned inline in every function** and have drifted to four values: `2022-04-01-preview`, `2021-01-01-preview`, `2020-10-01` and `2021-04-01`. Consolidate into a shared constant.
-- **No tests, no PSScriptAnalyzer config, no LICENSE file** yet. There is no build or lint step in CI — only publish.
+- **Token handling** — `Get-AzAccessToken -AsSecureString` returns a `SecureString`, which is what `Invoke-RestMethod -Authentication Bearer -Token` expects. Keep it a `SecureString`; never `ConvertFrom-SecureString` it to plaintext or log it. Go through `Get-PimAccessToken`, never `Get-AzAccessToken` directly, or the call escapes the refresh and the per-audience cache.
+- **`[nullable[T]]` parameters are unwrapped by PowerShell** to a plain `T`, so `$Param.Value` silently yields `$null`. Use the parameter directly. This bit both `Format-PimTimeSpan` and `New-PimActiveRole`.
+- **`[int]` rounds, it does not truncate.** `[int]5.7` is `6`. Use `[Math]::Floor` for elapsed and remaining time, or the CLI overstates how long privileged access has left to run.
+- **A `foreach` assigned to a variable collapses to a scalar** when it yields one item, and `+=` then concatenates instead of appending. Wrap in `@()`. This bit `Show-PimFooter`.
+- **`Get-PimProvider` returns hashtables**, so `(Get-PimProvider -Scope Entra)[0]` indexes the hashtable by the key `0` and returns `$null`. Wrap in `@()` first.
+- **`Get-AzPimRoleManagementPolicy` references an undefined `$authHeader`** on its `resource` scope branch. That path throws. It predates the provider layer and is not registered as an operation yet.
+- **`Get-PimPrincipalId` returns `$null` rather than throwing** when the identity cannot be resolved, so read-only sessions still work. Write paths must check it.
+- **API versions have drifted** across four values and are now consolidated in `Get-PimConfig`. The values there are the ones already in production use — treat a bump as its own reviewed change, not a tidy-up.
+- **No tests and no LICENSE file** yet. CI has no build or lint step — only publish. `PSScriptAnalyzerSettings.psd1` exists; run it locally:
+
+  ```powershell
+  Invoke-ScriptAnalyzer -Path $PWD -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+  ```
+
+  Pass `$PWD` rather than `.` — a relative directory path makes the analyzer throw a null reference before it reports anything.
+
+  The current baseline is two `PSAvoidUsingWriteHost` findings in `New-OfflineImport.ps1`, a dev-only helper. Module code is clean.
+
+Fixed in the Entra groundwork rework, kept here because the patterns are worth not repeating: the activation request that reported success without calling the API; `(Get-Date).AddHours($n).Hour()` calling a property as a method; `POST`ing self-activation to `roleEligibilityScheduleRequests` instead of `roleAssignmentScheduleRequests`; `principalId` set to a UPN instead of an object ID; `String.Trim` used to strip a substring when it takes a character set; the decision function returning `$true` from `end{}` regardless of outcome; `Disconnect-AzPim` tearing down the whole Az session; and the wildcard `Get-AzRoleAssignment` "PIM access" guess.
 
 ## Dependencies
 
@@ -167,7 +212,11 @@ Verify a manifest change resolves correctly:
 Test-ModuleManifest ./pimcli.psd1
 ```
 
+## Decisions made
+
+- **Entra ID ships in the same surface**, merged into the existing screens rather than as a separate menu branch or separate cmdlets. Navigation is action-first and provider is a filter. Settled when the groundwork landed.
+
 ## Open decisions
 
-- **Entra ID scope.** Whether Entra ID role PIM ships in the same module surface (`Start-PimCli` menu) or as separate top-level cmdlets.
-- **Interactive-only vs. scriptable.** The module currently exports only the interactive `Start-PimCli`. Publishing to the Gallery generally implies also exporting non-interactive cmdlets that can be scripted.
+- **Interactive-only vs. scriptable.** The module currently exports only the interactive `Start-PimCli`. Publishing to the Gallery generally implies also exporting non-interactive cmdlets that can be scripted. The provider functions (`Get-AzPimEligibleRole` and friends) are already shaped like the cmdlets this would export — they take plain parameters and emit objects — so the decision is which names become public, not a rewrite.
+- **Graph permissions.** Reading Entra PIM through an Az-issued Graph token depends on what the Az client application is consented for in the tenant. Worth confirming against a real tenant before building out the Entra reads, since it may constrain the approach.

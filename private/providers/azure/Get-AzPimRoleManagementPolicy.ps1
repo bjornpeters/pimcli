@@ -34,20 +34,20 @@ function Get-AzPimRoleManagementPolicy {
         [Parameter(Mandatory = $false,
             HelpMessage = "The name of the resource")]
         [string]$ResourceName,
-        
+
         [Parameter(Mandatory = $false,
             HelpMessage = "The name of the resource group containing the resource")]
         [string]$ResourceGroupName,
-        
+
         [Parameter(Mandatory = $true,
             HelpMessage = "The ID of the role definition")]
         [string]$RoleDefinitionId,
-        
-        [Parameter(Mandatory = $false, 
+
+        [Parameter(Mandatory = $false,
             HelpMessage = "The scope of the role assignment (subscription, resourceGroup, or resource)")]
         [ValidateSet('subscription', 'resourceGroup', 'resource')]
         [string]$Scope = 'resource',
-        
+
         [Parameter(Mandatory = $true,
             HelpMessage = "The ID of the Azure subscription")]
         [guid]$SubscriptionId
@@ -72,7 +72,7 @@ function Get-AzPimRoleManagementPolicy {
     process {
         # Build the scope ID based on the provided parameters
         $scopeId = ""
-        
+
         switch ($Scope) {
             'subscription' {
                 $scopeId = "/providers/Microsoft.Subscription/subscriptions/$SubscriptionId"
@@ -90,7 +90,7 @@ function Get-AzPimRoleManagementPolicy {
                 # Get the resource ID using REST API
                 $resourceUrl = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?`$filter=name eq '$ResourceName'&api-version=2021-04-01"
                 $resource = Invoke-RestMethod -Uri $resourceUrl -Headers $authHeader -Method Get
-                
+
                 if ($resource.value.Count -eq 0) {
                     throw "Resource '$ResourceName' not found in resource group '$ResourceGroupName'"
                 }
@@ -115,12 +115,12 @@ function Get-AzPimRoleManagementPolicy {
                 Token = $token
             }
             $response = Invoke-RestMethod @invokeParams
-            
+
             if (-not $response -or $response.value.Count -eq 0) {
                 Write-Warning "No role management policy found for the specified role and scope."
                 return $null
             }
-            
+
             return $response.value
         }
         catch {

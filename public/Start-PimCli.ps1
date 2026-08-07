@@ -39,16 +39,8 @@ function Start-PimCli {
             
             switch ($choice) {
                 "1" { Invoke-PimRequestApproval }
-                "2" { 
-                    Clear-Host
-                    Write-Host "Feature coming soon: Request role activation" -ForegroundColor Yellow
-                    Read-Host "Press Enter to continue"
-                }
-                "3" { 
-                    Clear-Host
-                    Write-Host "Feature coming soon: View active roles" -ForegroundColor Yellow
-                    Read-Host "Press Enter to continue"
-                }
+                "2" { Invoke-PimRoleActivation }
+                "3" { Show-AzPimActiveRoles }
                 "4" { 
                     Disconnect-AzPim 
                     $exit = $true

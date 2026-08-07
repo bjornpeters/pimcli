@@ -50,10 +50,14 @@ PowerShellVersion = '7.0'
 # Processor architecture (None, X86, Amd64) required by this module
 # ProcessorArchitecture = ''
 
-# Modules that must be imported into the global environment prior to importing this module
+# Modules that must be imported into the global environment prior to importing this module.
+# Declared with a minimum version so that Install-Module/Install-PSResource resolves and
+# installs them from the PowerShell Gallery automatically alongside this module.
+# Az.Accounts 3.0.0 is the floor for 'Get-AzAccessToken -AsSecureString'; Az.Resources 7.1.0
+# is the matching component version from the Az 12.0.0 rollup.
 RequiredModules = @(
-    'Az.Accounts'
-    'Az.Resources'
+    @{ ModuleName = 'Az.Accounts'; ModuleVersion = '3.0.0' }
+    @{ ModuleName = 'Az.Resources'; ModuleVersion = '7.1.0' }
 )
 
 # Assemblies that must be loaded prior to importing this module

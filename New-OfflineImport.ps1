@@ -2,7 +2,7 @@
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $moduleName = 'pimcli'
 
-# Import module when it
+# Import module when it is not found on the system.
 if (-not (Get-Module -Name $moduleName)) {
     Write-Host "Import module '$moduleName'."
     Import-Module -Name "$scriptPath/$moduleName.psd1"
